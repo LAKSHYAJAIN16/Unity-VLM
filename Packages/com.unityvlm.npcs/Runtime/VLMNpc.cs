@@ -21,6 +21,7 @@ namespace UnityVLM.NPCs
 
         [Header("Model")]
         [SerializeField] private string model = "Claude";
+        [SerializeField] private bool usePlanner = true;
         [SerializeField] [TextArea(1, 2)] private string apiKey = "";
 
         [Header("Actions")]
@@ -65,8 +66,16 @@ namespace UnityVLM.NPCs
             apiKey = key;
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
-                llmProvider = new ClaudeVLMProvider(apiKey, this);
-                memory.AddWorkingMemory("API key configured. Claude provider active.");
+                if (usePlanner)
+                {
+                    llmProvider = new DreamerVLMProvider(apiKey, this);
+                    memory.AddWorkingMemory("API key configured. Dreamer planner mode active.");
+                }
+                else
+                {
+                    llmProvider = new ClaudeVLMProvider(apiKey, this);
+                    memory.AddWorkingMemory("API key configured. Reactive Claude mode active.");
+                }
             }
         }
 
@@ -79,7 +88,16 @@ namespace UnityVLM.NPCs
 
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
-                llmProvider = new ClaudeVLMProvider(apiKey, this);
+                if (usePlanner)
+                {
+                    llmProvider = new DreamerVLMProvider(apiKey, this);
+                    memory.AddWorkingMemory("Planner mode enabled (Dreamer). Claude will generate multi-step plans.");
+                }
+                else
+                {
+                    llmProvider = new ClaudeVLMProvider(apiKey, this);
+                    memory.AddWorkingMemory("Reactive mode enabled. Claude decides one action per cycle.");
+                }
             }
             else
             {
