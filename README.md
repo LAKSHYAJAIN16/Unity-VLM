@@ -24,6 +24,20 @@ This project is a Unity package for creating intelligent NPCs powered by a visio
 5. Add `SemanticObject` components to interactable objects.
 6. Call `ApartmentDemoBuilder.BuildApartment(Vector3.zero)` from an editor script or runtime bootstrap to create the apartment demo.
 
+## Using Claude as the VLM
+
+1. Get an Anthropic API key from [console.anthropic.com](https://console.anthropic.com)
+2. On your `VLMNpc` component, paste your API key into the `apiKey` field
+3. Play the scene — the NPC will now use Claude 3.5 Sonnet to make decisions
+
+The NPC will:
+- Capture its camera view each decision cycle
+- Send the image + structured prompt to Claude
+- Parse Claude's response to extract the next action
+- Execute the action with validation
+
+Falls back to heuristic behavior if no API key is set.
+
 ## MVP behavior
 
 The NPC can:
