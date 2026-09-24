@@ -20,7 +20,8 @@ namespace UnityVLM.NPCs
         [SerializeField] private float decisionInterval = 2f;
 
         [Header("Model")]
-        [SerializeField] private string model = "Gemini";
+        [SerializeField] private string model = "Claude";
+        [SerializeField] [TextArea(1, 2)] private string apiKey = "";
 
         [Header("Actions")]
         [SerializeField] private bool canMove = true;
@@ -59,13 +60,33 @@ namespace UnityVLM.NPCs
             llmProvider = provider;
         }
 
+        public void SetApiKey(string key)
+        {
+            apiKey = key;
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                llmProvider = new ClaudeVLMProvider(apiKey, this);
+                memory.AddWorkingMemory("API key configured. Claude provider active.");
+            }
+        }
+
         private void Awake()
         {
             memory = new AgentMemory();
             memory.SetFact("identity", identity);
             memory.SetFact("goals", goals);
             navMeshAgent = GetComponent<NavMeshAgent>();
-            llmProvider = new HeuristicVLMProvider();
+
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                llmProvider = new ClaudeVLMProvider(apiKey, this);
+            }
+            else
+            {
+                llmProvider = new HeuristicVLMProvider();
+                Debug.LogWarning("No API key configured. Using heuristic fallback. Set 'apiKey' on VLMNpc to use Claude.");
+            }
+
             RegisterDefaultActions();
         }
 
