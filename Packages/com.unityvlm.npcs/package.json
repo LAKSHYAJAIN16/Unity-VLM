@@ -1,0 +1,9 @@
+{
+  "name": "com.unityvlm.npcs",
+  "displayName": "Unity VLM NPCs",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Unity package for Vision-Language Model controlled NPCs.",
+  "keywords": ["npc", "ai", "vlm", "unity"],
+  "category": "AI"
+}
