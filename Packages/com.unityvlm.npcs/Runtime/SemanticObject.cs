@@ -33,6 +33,11 @@ namespace UnityVLM.NPCs
             description = descriptionText;
         }
 
+        public void SetMovable(bool value)
+        {
+            movable = value;
+        }
+
         public IEnumerable<string> GetAvailableInteractions()
         {
             return availableInteractions;

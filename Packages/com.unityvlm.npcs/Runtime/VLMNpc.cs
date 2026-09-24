@@ -8,10 +8,10 @@ namespace UnityVLM.NPCs
     public class VLMNpc : MonoBehaviour
     {
         [Header("Identity")]
-        [SerializeField] private string identity = "NPC";
-        [SerializeField] [TextArea(2, 4)] private string description = "A helpful NPC.";
-        [SerializeField] [TextArea(3, 6)] private string goals = "Keep the area organized.";
-        [SerializeField] [TextArea(2, 4)] private string personality = "Friendly.";
+        [SerializeField] private string identity = "Bob";
+        [SerializeField] [TextArea(2, 4)] private string description = "You are Bob, the player's roommate.";
+        [SerializeField] [TextArea(3, 6)] private string goals = "Keep the apartment organized and help the player when reasonable.";
+        [SerializeField] [TextArea(2, 4)] private string personality = "Friendly, slightly sarcastic.";
 
         [Header("Perception")]
         [SerializeField] private Camera npcCamera;
@@ -38,6 +38,7 @@ namespace UnityVLM.NPCs
         private float nextDecisionTime;
         private NavMeshAgent navMeshAgent;
         private GameObject heldObject;
+        private IVLMProvider llmProvider;
 
         public string Identity => identity;
         public string Description => description;
@@ -51,6 +52,12 @@ namespace UnityVLM.NPCs
         public AgentMemory Memory => memory;
         public NpcObservation CurrentObservation => currentObservation;
         public GameObject HeldObject => heldObject;
+        public NavMeshAgent NavMeshAgent => navMeshAgent;
+
+        public void ConfigureModelProvider(IVLMProvider provider)
+        {
+            llmProvider = provider;
+        }
 
         private void Awake()
         {
@@ -58,6 +65,7 @@ namespace UnityVLM.NPCs
             memory.SetFact("identity", identity);
             memory.SetFact("goals", goals);
             navMeshAgent = GetComponent<NavMeshAgent>();
+            llmProvider = new HeuristicVLMProvider();
             RegisterDefaultActions();
         }
 
@@ -68,8 +76,13 @@ namespace UnityVLM.NPCs
                 npcCamera = GetComponentInChildren<Camera>();
             }
 
+            if (navMeshAgent == null)
+            {
+                navMeshAgent = GetComponent<NavMeshAgent>();
+            }
+
             nextDecisionTime = Time.time + decisionInterval;
-            memory.AddWorkingMemory("Agent initialized.");
+            memory.AddWorkingMemory("Agent initialized and ready to observe.");
         }
 
         private void Update()
@@ -103,27 +116,53 @@ namespace UnityVLM.NPCs
             currentObservation = observation;
             memory.AddWorkingMemory($"Observed: {observation.Summary}");
 
-            if (observation.VisibleObjects.Count == 0)
+            var prompt = VLMPromptBuilder.BuildPrompt(this, observation);
+            var decision = llmProvider != null ? llmProvider.Decide(this, observation, prompt) : new VLMDecision("wait", "", "", "", 1f, "No model provider configured.");
+
+            memory.AddWorkingMemory($"Decision: {decision.ActionName} {decision.TargetId}. Reason: {decision.Reason}");
+
+            if (string.IsNullOrEmpty(decision.ActionName))
             {
-                memory.AddWorkingMemory("No relevant target detected.");
                 return;
             }
 
-            var targetObject = observation.VisibleObjects[0];
-            if (targetObject.Type == "cup" || targetObject.Type == "Cup")
+            var targetObject = FindGameObjectById(decision.TargetId);
+            var target2Object = FindGameObjectById(decision.Target2Id);
+
+            if (decision.ActionName == "move_to")
             {
-                var cup = FindGameObjectById(targetObject.Id);
-                if (cup != null)
-                {
-                    ExecuteAction("move_to", cup);
-                }
+                ExecuteAction(decision.ActionName, targetObject, target2Object, decision.Text, decision.Seconds);
+                return;
+            }
+
+            if (decision.ActionName == "pick_up")
+            {
+                ExecuteAction(decision.ActionName, targetObject, target2Object, decision.Text, decision.Seconds);
+                return;
+            }
+
+            if (decision.ActionName == "place")
+            {
+                ExecuteAction(decision.ActionName, targetObject, target2Object, decision.Text, decision.Seconds);
+                return;
+            }
+
+            if (decision.ActionName == "speak")
+            {
+                ExecuteAction(decision.ActionName, targetObject, target2Object, decision.Text, decision.Seconds);
+                return;
+            }
+
+            if (decision.ActionName == "wait")
+            {
+                ExecuteAction(decision.ActionName, targetObject, target2Object, decision.Text, decision.Seconds);
             }
         }
 
         public NpcObservation Observe()
         {
             var observation = new NpcObservation();
-            observation.SetSummary("Scanning the living area for objects of interest.");
+            observation.SetSummary("Scanning the apartment for relevant objects and state changes.");
 
             if (visionEnabled && npcCamera != null)
             {
@@ -148,6 +187,11 @@ namespace UnityVLM.NPCs
                 var objects = FindObjectsOfType<SemanticObject>();
                 foreach (var semanticObject in objects)
                 {
+                    if (semanticObject == null || semanticObject.gameObject == null)
+                    {
+                        continue;
+                    }
+
                     var distance = Vector3.Distance(transform.position, semanticObject.transform.position);
                     observation.AddVisibleObject(semanticObject.name, semanticObject.ObjectType, distance);
                 }
@@ -165,9 +209,10 @@ namespace UnityVLM.NPCs
                     continue;
                 }
 
-                if (!action.Validate(this, target, target2, text, seconds))
+                var validation = ActionValidator.ValidateAction(this, actionName, target, target2, text, seconds);
+                if (!validation.Success)
                 {
-                    memory.AddWorkingMemory($"Action rejected: {actionName} ({target != null ? target.name : "null"})");
+                    memory.AddWorkingMemory($"Action rejected: {actionName}. {validation.Reason}");
                     return false;
                 }
 
@@ -189,6 +234,11 @@ namespace UnityVLM.NPCs
 
         public GameObject FindGameObjectById(string id)
         {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return null;
+            }
+
             var allObjects = FindObjectsOfType<GameObject>();
             foreach (var candidate in allObjects)
             {
@@ -210,8 +260,6 @@ namespace UnityVLM.NPCs
 
             return Vector3.Distance(transform.position, target.transform.position) <= maxDistance;
         }
-
-        public NavMeshAgent NavMeshAgent => navMeshAgent;
     }
 
     public class MoveToAction : IAgentAction
@@ -251,8 +299,7 @@ namespace UnityVLM.NPCs
                 return false;
             }
 
-            var position = target.transform.position;
-            var direction = position - npc.transform.position;
+            var direction = target.transform.position - npc.transform.position;
             if (direction.sqrMagnitude > 0.0001f)
             {
                 npc.transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
