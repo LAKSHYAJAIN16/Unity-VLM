@@ -28,13 +28,23 @@ This project is a Unity package for creating intelligent NPCs powered by a visio
 
 1. Get an Anthropic API key from [console.anthropic.com](https://console.anthropic.com)
 2. On your `VLMNpc` component, paste your API key into the `apiKey` field
-3. Play the scene — the NPC will now use Claude 3.5 Sonnet to make decisions
+3. Choose your reasoning mode:
+   - **Planner mode (Dreamer)** — `usePlanner = true` (default)
+     - Claude generates 2-5 step action plans
+     - Fewer API calls
+     - More coherent multi-step behaviors
+   - **Reactive mode** — `usePlanner = false`
+     - Claude decides one action per decision cycle
+     - More responsive to world changes
+     - More API calls
+
+4. Play the scene — the NPC will use Claude 3.5 Sonnet to reason about the world
 
 The NPC will:
-- Capture its camera view each decision cycle
+- Capture its camera view
 - Send the image + structured prompt to Claude
-- Parse Claude's response to extract the next action
-- Execute the action with validation
+- Receive a plan (or single action) and execute it
+- Re-plan as needed
 
 Falls back to heuristic behavior if no API key is set.
 
